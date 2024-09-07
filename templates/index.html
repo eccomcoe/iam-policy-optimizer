@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IAM Policy Optimizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+        select, button, input[type="checkbox"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+        }
+        button {
+            background-color: #28a745;
+        }
+        .length-info {
+            text-align: right;
+            font-size: 14px;
+            color: #666;
+        }
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .form-group label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .form-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+    <script>
+        function downloadPolicy(content, filename) {
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>IAM Policy Optimizer</h1>
+        <form id="policy-form">
+            <label for="policy">Paste your IAM Policy JSON here:</label>
+            <textarea id="policy" name="policy" required></textarea>
+
+            <label for="strategy">Select optimization strategy:</label>
+            <select id="strategy" name="strategy" required>
+                <option value="service">Split by Service</option>
+                <option value="permission">Split by Permission Type (Read/Write)</option>
+            </select>
+            
+            <label for="policyType">Select Policy Type:</label>
+            <select id="policyType" name="policyType" required>
+                <option value="user">User inline(2048 char)</option>
+                <option value="role">Role inline(10240 char)</option>
+                <option value="group">Group inline(5120 char)</option>
+                <option value="managed">Customer managed(6144 char)</option>
+            </select>
+
+            <div class="form-group">
+                <label for="validate">Validate Policy:</label>
+                <input type="checkbox" id="validate" name="validate">
+                <p>:(Need active aws environment variables with Access Analyzer Permission)</p>
+            </div>
+
+            <button type="button" onclick="optimizePolicy()">Optimize</button>
+        </form>
+
+        <div id="optimized-policies-container"></div>
+    </div>
+
+    <script>
+        async function optimizePolicy() {
+            const policy = document.getElementById('policy').value;
+            const strategy = document.getElementById('strategy').value;
+            const policyType = document.getElementById('policyType').value;
+            const validate = document.getElementById('validate').checked;
+    
+            console.log('Policy:', policy);
+            console.log('Strategy:', strategy);
+            console.log('Policy Type:', policyType);
+            console.log('Validate Policy:', validate);
+    
+            try {
+                const response = await fetch('/optimize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ policy, strategy, policyType, validate: validate ? 'on' : '' })
+                });
+    
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+    
+                const result = await response.json();
+                console.log('Result:', result);
+    
+                const container = document.getElementById('optimized-policies-container');
+                container.innerHTML = '';
+    
+                if (result.error) {
+                    container.innerHTML = `<div class="error">${result.error}</div>`;
+                    return;
+                }
+    
+                result.optimized_policies.forEach((policy, index) => {
+                    const policyTextArea = document.createElement('textarea');
+                    policyTextArea.value = policy;
+                    policyTextArea.readOnly = true;
+    
+                    const lengthInfo = document.createElement('div');
+                    lengthInfo.className = 'length-info';
+                    lengthInfo.innerText = `Optimized Policy ${index + 1} Length: ${result.optimized_lengths[index]}`;
+    
+                    const downloadButton = document.createElement('button');
+                    downloadButton.innerText = `Download Optimized Policy ${index + 1}`;
+                    downloadButton.onclick = () => {
+                        downloadPolicy(policy, `optimized_policy_${index + 1}.json`);
+                    };
+    
+                    container.appendChild(policyTextArea);
+                    container.appendChild(lengthInfo);
+                    container.appendChild(downloadButton);
+                });
+    
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while optimizing the policy. Please check the console for more details.');
+            }
+        }
+    </script>    
+</body>
+</html>
